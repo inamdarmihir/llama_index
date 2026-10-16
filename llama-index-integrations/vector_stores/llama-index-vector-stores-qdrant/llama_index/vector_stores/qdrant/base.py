@@ -1484,6 +1484,37 @@ class QdrantVectorStore(BasePydanticVectorStore):
                         match=MatchExcept(**{"except": values}),
                     )
                 )
+            elif subfilter.operator == FilterOperator.CONTAINS:
+                # an array payload field matches when any of its elements equals the value
+                # https://qdrant.tech/documentation/concepts/filtering/#match
+                conditions.append(
+                    FieldCondition(
+                        key=subfilter.key,
+                        match=MatchValue(value=subfilter.value),
+                    )
+                )
+            elif subfilter.operator == FilterOperator.ANY:
+                # the array field contains at least one of the values
+                # https://qdrant.tech/documentation/concepts/filtering/#match-any
+                conditions.append(
+                    FieldCondition(
+                        key=subfilter.key,
+                        match=MatchAny(any=list(subfilter.value)),
+                    )
+                )
+            elif subfilter.operator == FilterOperator.ALL:
+                # the array field contains every value; nest so that an enclosing
+                # OR/NOT treats the group as a single condition
+                conditions.append(
+                    Filter(
+                        must=[
+                            FieldCondition(
+                                key=subfilter.key, match=MatchValue(value=value)
+                            )
+                            for value in subfilter.value
+                        ]
+                    )
+                )
             elif subfilter.operator == FilterOperator.IS_EMPTY:
                 # This condition will match all records where the field reports either does not exist, or has null or [] value.
                 # https://qdrant.tech/documentation/concepts/filtering/#is-empty
@@ -1494,8 +1525,8 @@ class QdrantVectorStore(BasePydanticVectorStore):
                 # Unsupported filter operator
                 raise NotImplementedError(
                     f"Filter operator {subfilter.operator} is not supported by Qdrant vector store. "
-                    f"Supported operators: EQ, NE, GT, GTE, LT, LTE, IN, NIN, TEXT_MATCH, "
-                    f"TEXT_MATCH_INSENSITIVE, IS_EMPTY"
+                    f"Supported operators: EQ, NE, GT, GTE, LT, LTE, IN, NIN, ANY, ALL, "
+                    f"CONTAINS, TEXT_MATCH, TEXT_MATCH_INSENSITIVE, IS_EMPTY"
                 )
 
         filter = Filter()
